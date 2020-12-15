@@ -61,8 +61,13 @@ class Trainer(object):
         combined_data = self._combined_data_get_as_dataset()
 
         for i in range(EPOCH_COUNT):
+            # TODO: it's very likely that you'll need to change what values are passed from _day_process in order to complete
+            # train. I'm not familiar enough with IMPALA to know what those values should be, but it is important to me that
+            # the total reward be passed in some form so that it can logged.
             rewards = strategy.run(self._day_process, (combined_data,))
             total_reward = strategy.reduce(distribute.ReduceOp.SUM, rewards, axis=None)
+
+            # TODO: train both the conviction and position networks.
 
             logging.info('Epoch ' + str(i + 1) + ' finished with a total reward of ' + str(total_reward) + '!')
         
