@@ -22,6 +22,7 @@ def datetime_convert_to_date(input_datetime: datetime):
 
 def logging_setup():
     root_logger = logging.getLogger()
+    
     root_logger_previous_handlers = list(root_logger.handlers)
     for h in root_logger_previous_handlers:
         root_logger.removeHandler(h)

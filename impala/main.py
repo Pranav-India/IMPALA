@@ -1,5 +1,5 @@
-from impala import helpers
-from impala.trainer import Trainer
+import helpers
+from trainer import Trainer
 
 
 if __name__ == '__main__':

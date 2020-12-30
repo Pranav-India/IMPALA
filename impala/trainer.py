@@ -1,8 +1,8 @@
 from datetime import datetime
 from datetime import timedelta
-from impala import helpers
-from impala import models
-from impala.predictors import ActorCriticTimeSeriesPredictor
+import helpers
+import models
+from predictors import ActorCriticTimeSeriesPredictor
 import logging
 import numpy as np
 import os
@@ -12,7 +12,7 @@ from tensorflow import distribute
 from tensorflow import optimizers
 
 
-EPOCH_COUNT = 5
+EPOCH_COUNT = 1
 
 LEARNING_RATE = 0.0003
 CONVICTION_ACTION_COUNT = 2
@@ -64,12 +64,16 @@ class Trainer(object):
             # TODO: it's very likely that you'll need to change what values are passed from _day_process in order to complete
             # train. I'm not familiar enough with IMPALA to know what those values should be, but it is important to me that
             # the total reward be passed in some form so that it can logged.
+            print("\n \n")
+            print("running the strategy")
             rewards = strategy.run(self._day_process, (combined_data,))
+            print("running the strategy reduce")
             total_reward = strategy.reduce(distribute.ReduceOp.SUM, rewards, axis=None)
 
             # TODO: train both the conviction and position networks.
 
             logging.info('Epoch ' + str(i + 1) + ' finished with a total reward of ' + str(total_reward) + '!')
+            print("\n \n")
         
     def _combined_data_get_as_dataset(self):
         start_datetime = helpers.date_convert_to_datetime(START_DATE)
@@ -82,15 +86,17 @@ class Trainer(object):
             current_datetime += timedelta(days=1)
             current_date = helpers.datetime_convert_to_date(current_datetime)
 
-            conviction_data = self._data_get_as_list('features', current_date)
+            conviction_data = self._data_get_as_list('conviction', current_date + str('.txt'))
             if conviction_data == None:
                 continue
 
-            position_data = self._data_get_as_list('position', current_date)
-            evaluation_data = self._data_get_as_list('evaluation', current_date)
+            position_data = self._data_get_as_list('position', current_date + str('.txt'))
+            evaluation_data = self._data_get_as_list('evaluation', current_date + str('.txt'))
 
             combined_data.append((conviction_data, position_data, evaluation_data))
 
+        #combined_data = tf.convert_to_tensor(combined_data)
+        #print(combined_data)
         # TODO: convert combined_data into into a tensor or tf.data.Dataset that's passable by the strategy
         
         return combined_data
@@ -98,8 +104,11 @@ class Trainer(object):
     # This is a stand-in function for this example project. Data is retreived from Cloud Storage for actual training. 
     def _data_get_as_list(self, data_type: str, date: str):
         path = os.path.join(os.path.dirname(__file__), 'data', data_type, date)
+
         
+        #print(path,"this is path")
         if os.path.exists(path) == False:
+            #print("true")
             return None
 
         data = []
@@ -115,6 +124,8 @@ class Trainer(object):
                 
                 data.append(element_data)
         
+        data = tf.convert_to_tensor(data)
+        #print(data)
         return data
     
     # All of the data is broken up into individual days, which is treated as a single 'episode' of training.
@@ -122,9 +133,14 @@ class Trainer(object):
     # all at once.
     def _day_process(self, combined_data):
         # TODO: extract conviction_data, position_data, and evaluation_data from combined_data
-        conviction_data = []
-        position_data = []
-        evaluation_data = []
+        print('\n\n')
+        print((combined_data[0][2]) , "this is combined_data")
+        print(type(combined_data))
+        print('\n\n')
+        conviction_data = combined_data[0][0]
+        print(type(conviction_data))        
+        position_data = combined_data[0][1]
+        evaluation_data = combined_data[0][2]
 
         conviction_predictor = ActorCriticTimeSeriesPredictor([self._conviction_network], SEQUENCE_LENGTH)
         position_predictor = ActorCriticTimeSeriesPredictor([self._position_network], SEQUENCE_LENGTH)
@@ -135,17 +151,24 @@ class Trainer(object):
         # The values, probabilities, actions, and rewards for each step through this training episode are pre-calculated
         # and saved so that the new state 'value' can be reused when calling the learn function.
         for i in range(len(conviction_data)):
-            values, probabilities, actions = conviction_predictor.networks_predict()
             conviction_predictor.data_element_add(conviction_data[i])
+            values, probabilities, actions = conviction_predictor.networks_predict()
+            print(values, probabilities, actions)
+            print(len(conviction_data))
+            print('\n\n')
             position_data_element = position_data[i]
             
             # values will be returned as None if the number of feature elements stored in the conviction_predictor is
             # below the SEQUENCE_LENGTH threshold.
+
             if values == None:
                 # The position_data elements do not have all of the features required by the position_network.
                 # Missing features need to be added during evaluation. This is done here in the event that the stored
                 # feature elements is below SEQUENCE_LENGTH, otherwise it's done below.
-                position_data_element.extend([random.randint(0, 1), 0.5, 0])
+                #position_data_element.extend([random.randint(0, 1), 0.5, 0])
+                Add = tf.constant([random.randint(0, 1), 0.5, 0])
+                position_data_element = tf.concat([position_data_element,Add],0)
+                print(position_data_element)
                 position_predictor.data_element_add(position_data_element)
                 continue
             

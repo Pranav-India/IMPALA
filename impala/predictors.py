@@ -29,8 +29,11 @@ class ActorCriticTimeSeriesPredictor(PredictorBase):
             del self.features[0]
             
         self.features.append(features_element)
+        print(self.features)
 
     def networks_predict(self):
+        print(len(self.features))
+        print(self._sequence_length)
         if len(self.features) < self._sequence_length:
             return None, None, None
         
