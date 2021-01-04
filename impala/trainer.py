@@ -134,9 +134,9 @@ class Trainer(object):
     def _day_process(self, combined_data):
         # TODO: extract conviction_data, position_data, and evaluation_data from combined_data
         print('\n\n')
-        print((combined_data[0][2]) , "this is combined_data")
-        print(type(combined_data))
-        print('\n\n')
+        #print((combined_data[0][2]) , "this is combined_data")
+        #print(type(combined_data))
+        print('data combined')
         conviction_data = combined_data[0][0]
         print(type(conviction_data))        
         position_data = combined_data[0][1]
@@ -154,9 +154,14 @@ class Trainer(object):
             conviction_predictor.data_element_add(conviction_data[i])
             values, probabilities, actions = conviction_predictor.networks_predict()
             print(values, probabilities, actions)
-            print(len(conviction_data))
+            print("values, probabilities, actions")
+
+            #print(len(conviction_data))
+            print('\n\n')
+            print(i)
             print('\n\n')
             position_data_element = position_data[i]
+            position_data_element = tf.Variable(position_data_element)
             
             # values will be returned as None if the number of feature elements stored in the conviction_predictor is
             # below the SEQUENCE_LENGTH threshold.
@@ -168,10 +173,13 @@ class Trainer(object):
                 #position_data_element.extend([random.randint(0, 1), 0.5, 0])
                 Add = tf.constant([random.randint(0, 1), 0.5, 0])
                 position_data_element = tf.concat([position_data_element,Add],0)
-                print(position_data_element)
+                #print(position_data_element)
                 position_predictor.data_element_add(position_data_element)
+                print("position_data_element")
                 continue
             
+
+            #print("\n\n\nyeeeeeeee\n\n\n\n")
             # ActorCriticTimeSeriesPredictor returns a list of values, probabilities, and actions. This is to allow
             # for multiple models to be evaluated using the same data. This functionality is not necessary during
             # training, but that's why we need to get the 0th element here and below.
@@ -182,19 +190,28 @@ class Trainer(object):
                 'action': actions[0]
             })
 
+            #print(position_data_element)
             conviction_action_index = int(actions[0][0])
-            bid_close_price = float(position_data_element[2])
-            ask_close_price = float(position_data_element[3])
+            #bid_close_price = float(position_data_element[2])
+            #ask_close_price = float(position_data_element[3])
             # This value assignment is a stand-in for a more involved calculation that I haven't included in order to
             # streamline this example.
             position_relative_size, position_average_price = 1.0, 1.0
             
             # Changes the bid/ask values to be relative to the average price of the agent's current position in the stock.
-            position_data_element[2] = (bid_close_price / position_average_price) - 1
-            position_data_element[3] = (ask_close_price / position_average_price) - 1
-            position_data_element.append(conviction_action_index)
-            position_data_element.append(probabilities[0][conviction_action_index])
-            position_data_element.append(position_relative_size)
+            position_data_element = position_data_element[2].assign((float(position_data_element[2]) / position_average_price) - 1)
+            #print("here data is getting added")
+            position_data_element = position_data_element[3].assign(float(position_data_element[3]) / position_average_price) - 1
+            #position_data_element.append(conviction_action_index)
+            #position_data_element.append(probabilities[0][conviction_action_index])
+            #position_data_element.append(position_relative_size)
+            #print(probabilities,"probabilities")
+            #print(conviction_action_index,"conviction_action_index")
+            #print(float(probabilities[0][0,conviction_action_index]),"probabilities[0 , conviction_action_index]")
+
+            #print([conviction_action_index,probabilities[0][0,conviction_action_index],position_relative_size],"list")
+            Add2 = tf.constant([conviction_action_index,float(probabilities[0][0,conviction_action_index]),position_relative_size])
+            position_data_element = tf.concat([position_data_element,Add2],0)
             position_predictor.data_element_add(position_data_element)
 
             values, probabilities, actions = position_predictor.networks_predict()

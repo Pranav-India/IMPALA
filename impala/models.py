@@ -25,6 +25,7 @@ class ActorCriticBase(keras.Model):
         return values, probabilities
     
     def _layers_process(self, input_state):
+        print("no layers are running")
         return input_state
 
 
@@ -68,5 +69,6 @@ class ActorCriticTransformer(ActorCriticBase):
         x = self._model_layers['dropout_1'](x)
         x = self._model_layers['dense'](x)
         x = self._model_layers['dropout_2'](x)
+        print("thoruhg the layers")
 
         return x
