@@ -47,11 +47,14 @@ class Trainer(object):
         # size multipliers that correspond to the following amounts: [0, 0.1, 0.2, 0.4, 0.6, 0.8, 1, 2, 4, float('inf')].
         # The base value that these is $10,000, meaning action [1] would result in trade in the size of: 0.1 * $10,000 = $1,000.
         # The final action, float(inf), represents liquidating the entire position held by the agent.
+
         with strategy.scope():
             self._conviction_network = models.ActorCriticTransformer(CONVICTION_ACTION_COUNT, CONVICTION_FEATURE_COUNT,
                     SEQUENCE_LENGTH, ATTENTION_HEAD_COUNT, ATTENTION_DENSE_SIZE, DENSE_SIZE, FEED_FORWARD_DIMENTION,
                     DROPOUT_RATE)
-            self._conviction_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE))
+             self._conviction_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE))
+
+             # we neeed to define the optimizer for both the networks
 
             self._position_network = models.ActorCriticTransformer(POSITION_ACTION_COUNT, POSITION_FEATURE_COUNT,
                     SEQUENCE_LENGTH, ATTENTION_HEAD_COUNT, ATTENTION_DENSE_SIZE, DENSE_SIZE, FEED_FORWARD_DIMENTION,
@@ -68,6 +71,9 @@ class Trainer(object):
             print("running the strategy")
             rewards = strategy.run(self._day_process, (combined_data,))
             print("running the strategy reduce")
+
+            # using the rewards we need to calculate loss this also requires other data values which are needed like 
+            # these losses are then sent thorught the "strategy.reduce"   
             total_reward = strategy.reduce(distribute.ReduceOp.SUM, rewards, axis=None)
 
             # TODO: train both the conviction and position networks.
@@ -153,6 +159,8 @@ class Trainer(object):
         for i in range(len(conviction_data)):
             conviction_predictor.data_element_add(conviction_data[i])
             values, probabilities, actions = conviction_predictor.networks_predict()
+            # Here we are reciving the values of the conviction predictor we have to either store the next input values seperatly
+            # or we can sent two inputs each time since we are doing the bathching we should store it somehow rather than sending next_state again 
             print(values, probabilities, actions)
             print("values, probabilities, actions")
 
