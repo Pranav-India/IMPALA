@@ -158,11 +158,12 @@ class Trainer(object):
         # and saved so that the new state 'value' can be reused when calling the learn function.
 
 
-        #next_state = conviction_predictor.data_element_add_next_state(conviction_data[0])
+        next_state = conviction_predictor.data_element_add_next_state(conviction_data[0])
 
-        for i in range(len(conviction_data)):
-            conviction_predictor.data_element_add(conviction_data[i])
+        for i in range(len(conviction_data) - 1):
+            state = conviction_predictor.data_element_add(conviction_data[i])
             values, probabilities, actions = conviction_predictor.networks_predict()
+            next_state = conviction_predictor.data_element_add_next_state(conviction_data[i+1])
 
             # define state and next state so that it can be used for the propogation 
             # getting the next_state is a bit challenging part here

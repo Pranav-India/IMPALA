@@ -18,6 +18,8 @@ class ActorCriticTimeSeriesPredictor(PredictorBase):
         super(ActorCriticTimeSeriesPredictor, self).__init__(networks)
 
         self.features = []
+        #here we should add next_feature[]
+        self.next_features = []
 
         self._sequence_length = sequence_length
 
@@ -30,6 +32,15 @@ class ActorCriticTimeSeriesPredictor(PredictorBase):
             
         self.features.append(features_element)
         #print(self.features)
+        return self.features
+
+    def data_element_add_next_state(self, features_element: []):
+        if len(self.next_features) == self._sequence_length:
+            del self.next_features[0]
+            
+        self.next_features.append(features_element)
+
+        return self.next_features
 
     def networks_predict(self):
         #print(len(self.features))
