@@ -12,6 +12,8 @@ from tensorflow import distribute
 from tensorflow import optimizers # keras optimiser should be used
 
 
+
+
 EPOCH_COUNT = 1
 
 LEARNING_RATE = 0.0003
@@ -52,15 +54,19 @@ class Trainer(object):
             self._conviction_network = models.ActorCriticTransformer(CONVICTION_ACTION_COUNT, CONVICTION_FEATURE_COUNT,
                     SEQUENCE_LENGTH, ATTENTION_HEAD_COUNT, ATTENTION_DENSE_SIZE, DENSE_SIZE, FEED_FORWARD_DIMENTION,
                     DROPOUT_RATE)
-            self._conviction_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE)) #model.compile(optimizer="Adam", loss="mse", metrics=["mae"])
-
+            #self._conviction_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE)) #model.compile(optimizer="Adam", loss="mse", metrics=["mae"])
+            self._conviction_network_optimizer = tf.keras.optimizers.Adam()
              # we neeed to define the optimizer for both the networks
 
             self._position_network = models.ActorCriticTransformer(POSITION_ACTION_COUNT, POSITION_FEATURE_COUNT,
                     SEQUENCE_LENGTH, ATTENTION_HEAD_COUNT, ATTENTION_DENSE_SIZE, DENSE_SIZE, FEED_FORWARD_DIMENTION,
                     DROPOUT_RATE)
-            self._position_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE)) #model.compile(optimizer="Adam", loss="mse", metrics=["mae"])
+            self._position_network_optimizer = tf.keras.optimizers.Adam()
+
+            #self._position_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE)) #model.compile(optimizer="Adam", loss="mse", metrics=["mae"])
         
+
+
         combined_data = self._combined_data_get_as_dataset()
 
         for i in range(EPOCH_COUNT):
@@ -162,7 +168,7 @@ class Trainer(object):
 
         for i in range(len(conviction_data) - 1):
             state = conviction_predictor.data_element_add(conviction_data[i])
-            values, probabilities, actions = conviction_predictor.networks_predict()
+            convition_values, convition_probabilities, convition_actions = conviction_predictor.networks_predict(state)
             next_state = conviction_predictor.data_element_add_next_state(conviction_data[i+1])
 
             # define state and next state so that it can be used for the propogation 
@@ -201,10 +207,11 @@ class Trainer(object):
             # training, but that's why we need to get the 0th element here and below.
             conviction_predictions.append(
             {
-                'value': values[0],
-                'probabilities': probabilities[0],
-                'action': actions[0]
+                'value': conviction_values[0],
+                'probabilities': conviction_probabilities[0],
+                'action': conviction_actions[0]
             })
+
 
             #print(position_data_element)
             conviction_action_index = int(actions[0][0])
@@ -230,18 +237,30 @@ class Trainer(object):
             position_data_element = tf.concat([position_data_element,Add2],0)
             position_predictor.data_element_add(position_data_element)
 
-            values, probabilities, actions = position_predictor.networks_predict()
+            position_values, position_probabilities, position_actions = position_predictor.networks_predict()
             position_predictions.append(
             {
-                'value': values[0],
-                'probabilities': probabilities[0],
-                'action': actions[0]
+                'value': position_values[0],
+                'probabilities': position_probabilities[0],
+                'action': position_actions[0]
             })
 
             current_price = float(evaluation_data[i][0])
             # This append is a stand-in for a more involved calculation that I haven't included in order to
             # streamline this example. current_price is used here to calculate this value.
             rewards.append(random.randint(-1, 1))
+
+            with tf.GradientTape() as tape :
+                conviction_values_ , probabilities, actions = conviction_predictor.networks_predict(next_state)
+
+
+            delta = reward + 0.95*value_*(1-int(done)) - value
+
+            grad = 
+
+
+            self._conviction_network_optimizer.apply_gradients(zip(grad , self._conviction_network.trainable_variables))
+            self._position_network_optimizer.apply_gradients(zip(grad , self._position_network.trainable_variables)) 
         
         for i in range(len(conviction_predictions) - 1):
             is_done = i == len(conviction_predictions) - 2
