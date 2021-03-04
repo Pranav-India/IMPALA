@@ -167,9 +167,9 @@ class Trainer(object):
         next_state = conviction_predictor.data_element_add_next_state(conviction_data[0])
 
         for i in range(len(conviction_data) - 1):
-            state = conviction_predictor.data_element_add(conviction_data[i])
-            convition_values, convition_probabilities, convition_actions = conviction_predictor.networks_predict(state)
-            next_state = conviction_predictor.data_element_add_next_state(conviction_data[i+1])
+            convition_state = conviction_predictor.data_element_add(conviction_data[i])
+            convition_values, convition_probabilities, convition_actions = conviction_predictor.networks_predict(conviction_state)
+            convition_next_state = conviction_predictor.data_element_add_next_state(conviction_data[i+1])
 
             # define state and next state so that it can be used for the propogation 
             # getting the next_state is a bit challenging part here
@@ -214,7 +214,7 @@ class Trainer(object):
 
 
             #print(position_data_element)
-            conviction_action_index = int(actions[0][0])
+            conviction_action_index = int(conviction_actions[0][0])
             #bid_close_price = float(position_data_element[2])
             #ask_close_price = float(position_data_element[3])
             # This value assignment is a stand-in for a more involved calculation that I haven't included in order to
@@ -233,11 +233,11 @@ class Trainer(object):
             #print(float(probabilities[0][0,conviction_action_index]),"probabilities[0 , conviction_action_index]")
 
             #print([conviction_action_index,probabilities[0][0,conviction_action_index],position_relative_size],"list")
-            Add2 = tf.constant([conviction_action_index,float(probabilities[0][0,conviction_action_index]),position_relative_size])
+            Add2 = tf.constant([conviction_action_index,float(conviction_probabilities[0][0,conviction_action_index]),position_relative_size])
             position_data_element = tf.concat([position_data_element,Add2],0)
-            position_predictor.data_element_add(position_data_element)
+            position_state = position_predictor.data_element_add(position_data_element)
 
-            position_values, position_probabilities, position_actions = position_predictor.networks_predict()
+            position_values, position_probabilities, position_actions = position_predictor.networks_predict(position_state)
             position_predictions.append(
             {
                 'value': position_values[0],
@@ -251,10 +251,20 @@ class Trainer(object):
             rewards.append(random.randint(-1, 1))
 
             with tf.GradientTape() as tape :
-                conviction_values_ , probabilities, actions = conviction_predictor.networks_predict(next_state)
+                conviction_values_ , conviction_probabilities_, conviction_actions_ = conviction_predictor.networks_predict(next_state)
+                position_data_element_ = position_data[i+1]
+                position_data_element_ = tf.Variable(position_data_element_)
+                position_data_element_ = position_data_element_[2].assign((float(position_data_element_[2]) / position_average_price) - 1)    
+                position_data_element_ = position_data_element_[3].assign((float(position_data_element_[3]) / position_average_price) - 1)
+                conviction_action_index_ = int(conviction_actions_[0][0])
+                Add2_ = tf.constant([conviction_action_index_,float(conviction_probabilities_[0][0,conviction_action_index_]),position_relative_size])
+                position_data_element_ = tf.concat([position_data_element_,Add2_],0)
+                position_next_state = position_predictor.data_element_add(position_data_element_)
+                position_values_, position_probabilities_, position_actions_ = position_predictor.networks_predict(position_next_state)
 
 
-            delta = reward + 0.95*value_*(1-int(done)) - value
+            conviction_delta = reward + 0.95*conviction_values_*(1-int(done)) - conviction_values
+            position_delta = reward + 0.95*position_values_*(1-int(done)) - position_values
 
             grad = 
 

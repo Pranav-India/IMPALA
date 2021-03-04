@@ -62,12 +62,14 @@ class Trainer(object):
             self._position_network.compile(optimizer=optimizers.Adam(learning_rate=LEARNING_RATE)) #model.compile(optimizer="Adam", loss="mse", metrics=["mae"])
         
         combined_data = self._combined_data_get_as_dataset()
+        print(self._conviction_network)
+        print(self._position_network)
 
         for i in range(EPOCH_COUNT):
             # TODO: it's very likely that you'll need to change what values are passed from _day_process in order to complete
             # train. I'm not familiar enough with IMPALA to know what those values should be, but it is important to me that
             # the total reward be passed in some form so that it can logged.
-            print("\n \n")
+            #print("\n \n")
             print("running the strategy")
             rewards = strategy.run(self._day_process, (combined_data,))
             print("running the strategy reduce")
@@ -79,7 +81,7 @@ class Trainer(object):
             # TODO: train both the conviction and position networks.
 
             logging.info('Epoch ' + str(i + 1) + ' finished with a total reward of ' + str(total_reward) + '!')
-            print("\n \n")
+            #print("\n \n")
         
     def _combined_data_get_as_dataset(self):
         start_datetime = helpers.date_convert_to_datetime(START_DATE)
@@ -139,12 +141,12 @@ class Trainer(object):
     # all at once.
     def _day_process(self, combined_data):
         # TODO: extract conviction_data, position_data, and evaluation_data from combined_data
-        print('\n\n')
+        #print('\n\n')
         #print((combined_data[0][2]) , "this is combined_data")
         #print(type(combined_data))
-        print('data combined')
+        #print('data combined')
         conviction_data = combined_data[0][0]
-        print(type(conviction_data))        
+        #print(type(conviction_data))        
         position_data = combined_data[0][1]
         evaluation_data = combined_data[0][2]
 
@@ -153,6 +155,8 @@ class Trainer(object):
         conviction_predictions = []
         position_predictions = []
         rewards = []
+        print(conviction_predictor)
+        print(position_predictor)
 
         # The values, probabilities, actions, and rewards for each step through this training episode are pre-calculated
         # and saved so that the new state 'value' can be reused when calling the learn function.
@@ -161,20 +165,20 @@ class Trainer(object):
         #next_state = conviction_predictor.data_element_add_next_state(conviction_data[0])
 
         for i in range(len(conviction_data)):
-            conviction_predictor.data_element_add(conviction_data[i])
-            values, probabilities, actions = conviction_predictor.networks_predict()
+            state = conviction_predictor.data_element_add(conviction_data[i])
+            values, probabilities, actions = conviction_predictor.networks_predict(state)
 
             # define state and next state so that it can be used for the propogation 
             # getting the next_state is a bit challenging part here
             # Here we are reciving the values of the conviction predictor we have to either store the next input values seperatly
             # or we can sent two inputs each time since we are doing the bathching we should store it somehow rather than sending next_state again 
-            print(values, probabilities, actions)
-            print("values, probabilities, actions")
+            #print(values, probabilities, actions)
+            #print("values, probabilities, actions")
 
             #print(len(conviction_data))
-            print('\n\n')
-            print(i)
-            print('\n\n')
+            #print('\n\n')
+            #print(i)
+            #print('\n\n')
             position_data_element = position_data[i]
             position_data_element = tf.Variable(position_data_element)
             
@@ -190,7 +194,7 @@ class Trainer(object):
                 position_data_element = tf.concat([position_data_element,Add],0)
                 #print(position_data_element)
                 position_predictor.data_element_add(position_data_element)
-                print("position_data_element")
+                #print("position_data_element")
                 continue
             
 
@@ -227,9 +231,9 @@ class Trainer(object):
             #print([conviction_action_index,probabilities[0][0,conviction_action_index],position_relative_size],"list")
             Add2 = tf.constant([conviction_action_index,float(probabilities[0][0,conviction_action_index]),position_relative_size])
             position_data_element = tf.concat([position_data_element,Add2],0)
-            position_predictor.data_element_add(position_data_element)
+            state = position_predictor.data_element_add(position_data_element)
 
-            values, probabilities, actions = position_predictor.networks_predict()
+            values, probabilities, actions = position_predictor.networks_predict(state)
             position_predictions.append(
             {
                 'value': values[0],

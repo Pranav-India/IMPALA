@@ -45,18 +45,21 @@ class ActorCriticTimeSeriesPredictor(PredictorBase):
     def networks_predict(self , state):
         #print(len(self.features))
         #print(self._sequence_length)
-        if len(self.state) < self._sequence_length:
+        if len(state) < self._sequence_length:
             return None, None, None
         
         values = []
         probabilities = []
         actions = []
+        #print(state)
 
         for network in self._networks:
-            features = tf.convert_to_tensor([self.state], dtype=tf.float32)
+            features = tf.convert_to_tensor([state], dtype=tf.float32)
+            #print(features.shape)
+            
+            
             network_values, network_probabilities = network.call(features)
             network_action = self._action_choose(probabilities=network_probabilities)
-            
             values.append(network_values)
             probabilities.append(network_probabilities)
             actions.append(network_action)

@@ -1,0 +1,10 @@
+1. most probably we can directly use the buffer queue but make necessary changes
+    create buffer_queue : trajectory , input shape ,output size , queue_size , batch_size , number_actors
+    
+
+2. add sess to the models.py file it refer to the model.py from Distributed_learning folder
+
+3. start the training of the learner have to dig deep we must be able to use the existing code
+    for this we have to include train function which can implemented by refering to the model.train amd using the our own trainer.py
+
+4. Actor part.
