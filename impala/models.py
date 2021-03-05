@@ -69,6 +69,6 @@ class ActorCriticTransformer(ActorCriticBase):
         x = self._model_layers['dropout_1'](x)
         x = self._model_layers['dense'](x)
         x = self._model_layers['dropout_2'](x)
-        print("thorhg the layers")
+        print("through the layers")
 
         return x
