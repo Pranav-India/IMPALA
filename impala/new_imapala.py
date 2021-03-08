@@ -169,7 +169,7 @@ def main(_):
 
             for _ in range(FLAGS.trajectory):
 
-                conviction_action, position_action, convition_behavior_policy, position_behavior_policy, max_prob = actor.get_policy_and_action(
+                conviction_action, position_action, convition_behavior_policy, position_behavior_policy, conviction_max_prob , position_max_prob = actor.get_policy_and_action(
                     conviction_network_state, position_network_state, conviction_previous_action , position_previous_action) # Need to write a function in trainer.py which takes input the state,previous action and returns action,behaviour_policy,max_prob 
 
                 episode_step += 1

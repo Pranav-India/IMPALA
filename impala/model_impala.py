@@ -136,7 +136,7 @@ class IMPALA:
                 self.conviction_action_placeholder = tf.placeholder(tf.int32, shape=[None, self.trajectory])
                 self.position_action_placeholder = tf.placeholder(tf.int32, shape=[None, self.trajectory])
                 self.reward_placeholder = tf.placeholder(tf.float32, shape=[None, self.trajectory])
-                self.discount_placeholder = tf.placeholder(tf.bool, shape=[None, self.trajectory])
+                self.done_placeholder = tf.placeholder(tf.bool, shape=[None, self.trajectory])
                 self.conviction_network_behaviour_policy_placeholder = tf.placeholder(tf.float32, shape=[None, self.trajectory, self.num_action_conviction])
                 self.position_network_behaviour_policy_placeholder = tf.placeholder(tf.float32, shape=[None, self.trajectory, self.num_action_position])
 
@@ -146,7 +146,7 @@ class IMPALA:
                     squeezed = tf.tanh(self.reward_placeholder / 5.0)
                     self.clipped_reward_placeholder = tf.where(self.reward_placeholder < 0, .3 * squeezed, squeezed) * 5.
 
-                self.discounts = tf.to_float(~self.discount_placeholder) * self.discount_factor
+                self.discounts = tf.to_float(~self.done_placeholder) * self.discount_factor
 
                 self.conviction_policy, self.unrolled_conviction_first_policy, \
                     self.unrolled_conviction_first_value, self.unrolled_conviction_middle_policy,\
@@ -173,87 +173,121 @@ class IMPALA:
                 self.unrolled_first_conviction_behavior_policy, self.unrolled_middle_conviction_behavior_policy, self.unrolled_last_conviction_behavior_policy = vtrace.split_data(self.conviction_network_behaviour_policy_placeholder)
                 self.unrolled_first_position_behavior_policy, self.unrolled_middle_position_behavior_policy, self.unrolled_last_position_behavior_policy = vtrace.split_data(self.position_network_behaviour_policy_placeholder)
 
-                self.vs, self.clipped_rho = vtrace.from_softmax(
+                self.c_vs, self.c_clipped_rho = vtrace.from_softmax(
                                                 behavior_policy_softmax=self.unrolled_first_conviction_behavior_policy, target_policy_softmax=self.unrolled_conviction_first_policy,
                                                 actions=self.unrolled_first_conviction_action, discounts=self.unrolled_first_discounts, rewards=self.unrolled_first_reward,
                                                 values=self.unrolled_conviction_first_value, next_values=self.unrolled_conviction_middle_value, action_size=self.num_action_conviction)
 
-                self.vs_plus_1, _ = vtrace.from_softmax(
+                self.c_vs_plus_1, _ = vtrace.from_softmax(
                                                 behavior_policy_softmax=self.unrolled_middle_conviction_behavior_policy, target_policy_softmax=self.unrolled_conviction_middle_policy,
                                                 actions=self.unrolled_middle_conviction_action, discounts=self.unrolled_middle_discounts, rewards=self.unrolled_middle_reward,
                                                 values=self.unrolled_conviction_middle_value, next_values=self.unrolled_conviction_last_value, action_size=self.num_action_conviction)
 
-                self.vs, self.clipped_rho = vtrace.from_softmax(
+                self.p_vs, self.p_clipped_rho = vtrace.from_softmax(
                                                 behavior_policy_softmax=self.unrolled_first_position_behavior_policy, target_policy_softmax=self.unrolled_position_first_policy,
                                                 actions=self.unrolled_first_position_action, discounts=self.unrolled_first_discounts, rewards=self.unrolled_first_reward,
                                                 values=self.unrolled_position_first_value, next_values=self.unrolled_position_middle_value, action_size=self.num_action_position)
 
-                self.vs_plus_1, _ = vtrace.from_softmax(
+                self.p_vs_plus_1, _ = vtrace.from_softmax(
                                                 behavior_policy_softmax=self.unrolled_middle_position_behavior_policy, target_policy_softmax=self.unrolled_position_middle_policy,
                                                 actions=self.unrolled_middle_position_action, discounts=self.unrolled_middle_discounts, rewards=self.unrolled_middle_reward,
                                                 values=self.unrolled_position_middle_value, next_values=self.unrolled_position_last_value, action_size=self.num_action_position)
 
 
+                self.c_pg_advantage = tf.stop_gradient(
+                    self.c_clipped_rho * \
+                        (self.unrolled_first_reward + self.unrolled_first_discounts * self.vs_plus_1 - self.unrolled_conviction_first_value))
 
+                self.p_pg_advantage = tf.stop_gradient(
+                    self.p_clipped_rho * \
+                        (self.unrolled_first_reward + self.unrolled_first_discounts * self.vs_plus_1 - self.unrolled_position_first_value))
 
+                self.c_pi_loss = vtrace.compute_policy_gradient_loss(
+                    softmax=self.unrolled_conviction_first_policy,
+                    actions=self.unrolled_first_conviction_action,
+                    advantages=self.c_pg_advantage,
+                    output_size=self.num_action_conviction)
 
+                self.p_pi_loss = vtrace.compute_policy_gradient_loss(
+                    softmax=self.unrolled_position_first_policy,
+                    actions=self.unrolled_first_position_action,
+                    advantages=self.p_pg_advantage,
+                    output_size=self.num_action_position)                
 
+                self.c_baseline_loss = vtrace.compute_baseline_loss(
+                    c_vs=tf.stop_gradient(self.c_vs),
+                    value=self.unrolled_conviction_first_value)
 
+                self.p_baseline_loss = vtrace.compute_baseline_loss(
+                    p_vs=tf.stop_gradient(self.p_vs),
+                    value=self.unrolled_position_first_value)
 
+                self.c_entropy = vtrace.compute_entropy_loss(
+                    softmax=self.unrolled_conviction_first_policy)
 
-                self.pg_advantage = tf.stop_gradient(
-                    self.clipped_rho * \
-                        (self.unrolled_first_reward + self.unrolled_first_discounts * self.vs_plus_1 - self.unrolled_first_value))
+                self.p_entropy = vtrace.compute_entropy_loss(
+                    softmax=self.unrolled_position_first_policy)
 
-                self.pi_loss = vtrace.compute_policy_gradient_loss(
-                    softmax=self.unrolled_first_policy,
-                    actions=self.unrolled_first_action,
-                    advantages=self.pg_advantage,
-                    output_size=self.num_action)
-                self.baseline_loss = vtrace.compute_baseline_loss(
-                    vs=tf.stop_gradient(self.vs),
-                    value=self.unrolled_first_value)
-                self.entropy = vtrace.compute_entropy_loss(
-                    softmax=self.unrolled_first_policy)
+                self.c_total_loss = self.c_pi_loss + self.c_baseline_loss * self.baseline_loss_coef + self.c_entropy * self.entropy_coef
 
-                self.total_loss = self.pi_loss + self.baseline_loss * self.baseline_loss_coef + self.entropy * self.entropy_coef
+                self.p_total_loss = self.p_pi_loss + self.p_baseline_loss * self.baseline_loss_coef + self.p_entropy * self.entropy_coef
 
             self.num_env_frames = tf.train.get_or_create_global_step()
             self.learning_rate = tf.train.polynomial_decay(self.start_learning_rate, self.num_env_frames, self.learning_frame, self.end_learning_rate)
-            self.optimizer = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99, momentum=0, epsilon=0.1)
-            gradients, variable = zip(*self.optimizer.compute_gradients(self.total_loss))
-            gradients, _ = tf.clip_by_global_norm(gradients, self.gradient_clip_norm)
-            self.train_op = self.optimizer.apply_gradients(zip(gradients, variable), global_step=self.num_env_frames)
+            self.conviction_optimizer = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99, momentum=0, epsilon=0.1)
+            self.position_optimizer = tf.train.RMSPropOptimizer(self.learning_rate, decay=0.99, momentum=0, epsilon=0.1)
+            conviction_gradients, c_variable = zip(*self.conviction_optimizer.compute_gradients(self.c_total_loss))
+            position_gradients, p_variable = zip(*self.position_optimizer.compute_gradients(self.p_total_loss))
+            conviction_gradients, _ = tf.clip_by_global_norm(conviction_gradients, self.gradient_clip_norm)
+            position_gradients, _ = tf.clip_by_global_norm(position_gradients, self.gradient_clip_norm)
+            self.train_op_conviction = self.conviction_optimizer.apply_gradients(zip(conviction_gradients, c_variable), global_step=self.num_env_frames)
+            self.train_op_position = self.position_optimizer.apply_gradients(zip(position_gradients, p_variable), global_step=self.num_env_frames)
 
         self.global_to_session = copy_src_to_dst(learner_name, model_name)
-        self.saver = tf.train.Saver()
+        self.conviction_saver = tf.train.Saver()
+        self.position_saver = tf.train.Saver()
 
     def save_weight(self, path):
-        self.saver.save(self.sess, path)
+        self.conviction_saver.save(self.sess, path)
+        self.position_saver.save(self.sess, path)
 
     def load_weight(self, path):
-        self.saver.restore(self.sess, path)
+        self.conviction_saver.restore(self.sess, path)
+        self.position_saver.restore(self.sess, path)
 
     def parameter_sync(self):
         self.sess.run(self.global_to_session)
 
-    def train(self, state, reward, action, done, behavior_policy, previous_action, initial_h, initial_c):
-        normalized_state = np.stack(state) / 255
-        feed_dict={
-            self.t_s_ph: normalized_state,
-            self.t_pa_ph: previous_action,
-            self.t_initial_h_ph: initial_h,
-            self.t_initial_c_ph: initial_c,
-            self.a_ph: action,
-            self.d_ph: done,
-            self.r_ph: reward,
-            self.b_ph: behavior_policy}
-
-        pi_loss, value_loss, entropy, learning_rate, _ = self.sess.run(
-            [self.pi_loss, self.baseline_loss, self.entropy, self.learning_rate, self.train_op],
-            feed_dict=feed_dict)
+    def train(self, conviction_network_state, position_network_state, reward, conviction_action, position_action ,  done, convition_behavior_policy , position_behavior_policy ,  conviction_previous_action , position_previous_action):
+        conviction_state = np.stack(conviction_network_state)
+        position_state = np.stack(position_network_state)
+        feed_dict_conviction={
+            self.trajectory_state_placeholder_conviction_network : conviction_state,
+            self.trajectory_conviction_previous_action_placeholder: conviction_previous_action,
+            self.conviction_action_placeholder: conviction_action,
+            self.done_placeholder: done,
+            self.reward_placeholder: reward,
+            self.conviction_network_behaviour_policy_placeholder: convition_behavior_policy
+            }
         
-        return pi_loss, value_loss, entropy, learning_rate
+        feed_dict_position={
+            self.trajectory_state_placeholder_position_network : position_state
+            self.trajectory_conviction_previous_action_placeholder: conviction_previous_action,
+            self.position_action_placeholder:position_action,
+            self.done_placeholder: done,
+            self.reward_placeholder: reward,
+            self.position_network_behaviour_policy_placeholder: position_behavior_policy
+            }
+
+        c_pi_loss, c_value_loss, c_entropy, learning_rate, _ = self.sess.run(
+            [self.c_pi_loss, self.c_baseline_loss, self.c_entropy, self.learning_rate, self.train_op_conviction],
+            feed_dict=feed_dict_conviction)
+
+        p_pi_loss, p_value_loss, p_entropy, learning_rate, _ = self.sess.run(
+            [self.p_pi_loss, self.p_baseline_loss, self.p_entropy, self.learning_rate, self.train_op_position],
+            feed_dict=feed_dict_position)
+        
+        return c_pi_loss, c_value_loss, c_entropy, p_pi_loss, p_value_loss, p_entropy, learning_rate
 
     def test(self):
         batch_size = 2
@@ -283,19 +317,27 @@ class IMPALA:
     def parameter_sync(self):
         self.sess.run(self.global_to_session)
 
-    def get_policy_and_action(self, state, previous_action, h, c):
-        normalized_state = np.stack(state) / 255
-        policy, result_c, result_h = self.sess.run(
-            [self.policy, self.c, self.h], feed_dict={
-                                            self.s_ph: [normalized_state],
-                                            self.pa_ph: [previous_action],
-                                            self.initial_h_ph: [h],
-                                            self.initial_c_ph: [c]})
-        policy = policy[0]
-        result_c = result_c[0]
-        result_h = result_h[0]
-        action = np.random.choice(self.num_action, p=policy)
-        return action, policy, max(policy), result_c, result_h
+    def get_policy_and_action(self, conviction_network_state, position_network_state, conviction_previous_action , position_previous_action):
+        conviction_state = np.stack(conviction_network_state)
+        position_state = np.stack(position_network_state)
+        conviction_policy = self.sess.run(
+            [self.policy], feed_dict={
+                                            self.state_placeholder_conviction_network: [conviction_state],
+                                            self.conviction_previous_action_placeholder: [conviction_previous_action],
+                                            })
+
+        position_policy = self.sess.run(
+            [self.policy], feed_dict={
+                                            self.state_placeholder_position_network: [position_state],
+                                            self.position_previous_action_placeholder: [position_previous_action],
+                                            })
+        
+        conviction_policy = conviction_policy[0]
+        conviction_action = np.random.choice(self.num_action_position, p=conviction_policy)
+
+        position_policy = position_policy[0]
+        position_action = np.random.choice(self.num_action_position, p=position_policy)
+        return conviction_action, position_action , conviction_policy, position_policy, max(conviction_policy) , max(position_policy)
 
     def set_session(self, sess):
         self.sess = sess
