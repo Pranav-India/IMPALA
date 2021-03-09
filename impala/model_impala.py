@@ -366,4 +366,4 @@ if __name__ == '__main__':
                 learner_name='learner',
                 lstm_hidden_size=256)
     impala.set_session(sess)
-    impala.test()
+    #impala.test()

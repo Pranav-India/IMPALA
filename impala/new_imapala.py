@@ -150,7 +150,7 @@ def main(_):
         #previous_action = 0
         #previous_h = np.zeros([FLAGS.lstm_size])
         #previous_c = np.zeros([FLAGS.lstm_size])
-
+        env = env.Environment(240)
         episode = 0
         score = 0
         episode_step = 0
@@ -173,7 +173,8 @@ def main(_):
                     conviction_network_state, position_network_state, conviction_previous_action , position_previous_action) # Need to write a function in trainer.py which takes input the state,previous action and returns action,behaviour_policy,max_prob 
 
                 episode_step += 1
-                total_max_prob += max_prob
+                total_conviction_max_prob += conviction_max_prob
+                total_position_max_prob += position_max_prob
 
                 conviction_network_next_state, position_network_next_state , reward, done, info = env.step(action % available_output_size)
 
