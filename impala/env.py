@@ -10,9 +10,13 @@ class Environment():
         self.sequence_length = sequence_length
         
     def reset():
+        data = self._combined_data_get_as_dataset()
+        conviction_data = data[0][0]
+        position_data = data[0][1]
+        evaluation_data = data[0][2]
 
         
-        return state
+        return conviction_state 
 
     def step():
         return next_state , reward

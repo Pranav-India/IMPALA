@@ -38,19 +38,27 @@ def copy_src_to_dst(from_scope, to_scope):
         op_holder.append(to_var.assign(from_var))
     return op_holder
 
+def _action_choose(probabilities: tf.Tensor):
+        action_probabilities = tfp.distributions.Categorical(probs=probabilities)
+        action = action_probabilities.sample()
+
+        return action
+
+
 def network(state, num_action ):
      model_network = ActorCriticTransformer( num_action, CONVICTION_FEATURE_COUNT,
                     SEQUENCE_LENGTH, ATTENTION_HEAD_COUNT, ATTENTION_DENSE_SIZE, DENSE_SIZE, FEED_FORWARD_DIMENTION,
                     DROPOUT_RATE)
     critic , actor = model_network.call(state)
-    return actor, critic
+    ac = _action_choose(actor)
+    return actor, critic , ac
 
 def build_network(state, previous_action, 
                   trajectory_state, trajectory_previous_action, 
                   num_action,  trajectory):
 
     with tf.variable_scope('impala', reuse=tf.AUTO_REUSE):
-        policy, _ = network(
+        policy, value , action  = network(
             state=state,
             num_action=num_action)
 
@@ -98,7 +106,7 @@ def build_network(state, previous_action,
     unrolled_last_policy = tf.stack(unrolled_last_policy, axis=1)
     unrolled_last_value = tf.stack(unrolled_last_value, axis=1)
 
-    return policy,unrolled_first_policy, unrolled_first_value, \
+    return policy,value , action , unrolled_first_policy, unrolled_first_value, \
         unrolled_middle_policy, unrolled_middle_value, \
             unrolled_last_policy, unrolled_last_value
 
@@ -148,7 +156,7 @@ class IMPALA:
 
                 self.discounts = tf.to_float(~self.done_placeholder) * self.discount_factor
 
-                self.conviction_policy, self.unrolled_conviction_first_policy, \
+                self.conviction_policy, self.conviction_value , self.c_action , self. ,self.unrolled_conviction_first_policy, \
                     self.unrolled_conviction_first_value, self.unrolled_conviction_middle_policy,\
                         self.unrolled_conviction_middle_value, self.unrolled_conviction_last_policy,\
                             self.unrolled_conviction_last_value = build_network(
@@ -320,12 +328,19 @@ class IMPALA:
     def get_policy_and_action(self, conviction_network_state, position_network_state, conviction_previous_action , position_previous_action):
         conviction_state = np.stack(conviction_network_state)
         position_state = np.stack(position_network_state)
-        conviction_policy = self.sess.run(
-            [self.policy], feed_dict={
+        conviction_policy , value , action  = self.sess.run(
+            [self.conviction_policy, self.conviction_value , self.c_action], feed_dict={
                                             self.state_placeholder_conviction_network: [conviction_state],
                                             self.conviction_previous_action_placeholder: [conviction_previous_action],
                                             })
-
+        position_data_element = tf.Variable(position_network_state)
+        conviction_action_index = int(actions[0][0])
+        position_relative_size, position_average_price = 1.0, 1.0
+        position_data_element = position_data_element[2].assign((float(position_data_element[2]) / position_average_price) - 1)
+        position_data_element = position_data_element[3].assign(float(position_data_element[3]) / position_average_price) - 1
+        Add2 = tf.constant([conviction_action_index,float(probabilities[0][0,conviction_action_index]),position_relative_size])
+        position_data_element = tf.concat([position_data_element,Add2],0)
+        
         position_policy = self.sess.run(
             [self.policy], feed_dict={
                                             self.state_placeholder_position_network: [position_state],
